@@ -1,9 +1,16 @@
 import socket
 from clockdeco import clock
+# from nltk.corpus import framenet as fn
+
 """
 	Given CoNLL format passed as input, where sentences are split by \n\n, return list of verb:
 """
 # user: setup semafor parser to listen at port 8080, import "semafor" from api with reconnect=True
+
+from collections import namedtuple
+
+framedText = namedtuple('framedText', ['text', 'frame'])
+
 
 @clock
 def semafor(sock, text, reconnect=None):
@@ -25,6 +32,46 @@ def semafor(sock, text, reconnect=None):
 			break
 		response.append(eval(chunk.decode('utf-8')))
 	return response
+
+
+def span_to_text(span_list):
+	return ' '.join([span_item['text'] for span_item in span_list])
+
+
+def semafor_util(semafor_output):
+	"""
+
+	:param semafor_output: the output from semafor as dict
+	:return: dict, intuitive breakdown for ease of use
+	"""
+	sents = []
+
+	# a list where for each sentence, we have keys: [frames, tokens]
+	for item in semafor_output:
+		# for each sentences top_level frames
+		sent_frames = {}
+		for annotation_set in item['frames']:
+
+			# figure out target and text
+			target = annotation_set['target']
+			target_frame = target['name']
+			target_text = span_to_text(target['spans'])
+			top_frame = framedText(target_text, target_frame)
+			# target_index = (target['spans'][0]['start'], target['spans'][0]['start'])
+
+			args_sets = annotation_set['annotationSets']
+			descendants = []
+			for arg in args_sets:
+				for frame_element in arg['frameElements']:
+					arg_text = span_to_text(frame_element['spans'])
+					arg_frame = frame_element['name']
+					# ignore if same as target
+					if arg_text == target_text and arg_frame == target_frame:
+						continue
+					descendants.append(framedText(arg_text, arg_frame))
+			sent_frames.update({top_frame: descendants})
+		sents.append(sent_frames)
+	return sents
 
 
 if __name__ == '__main__':
@@ -71,3 +118,6 @@ if __name__ == '__main__':
 	response = semafor(sock=None, text=CONLL_output, reconnect=1)
 	print(response)
 	# print('ok')
+
+	sents = semafor_util(response)
+	print(sents)
